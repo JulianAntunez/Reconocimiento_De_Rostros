@@ -6,6 +6,7 @@ Permite probar:
 3. Imágenes estáticas (JPG/PNG).
 """
 
+from typing import Optional
 import argparse
 import sys
 import time
