@@ -105,7 +105,6 @@ def procesar_webcam(
     nombre_ventana = "Fase 2: Prueba de Deteccion (MediaPipe)"
 
     if not modo_headless:
-        cv2.namedWindow(nombre_ventana, cv2.WINDOW_NORMAL)
         print("Iniciando ventana en vivo. Presiona 'q' o 'ESC' para salir.")
     else:
         print(f"Modo no interactivo: capturando {max_frames_headless} frames para medir rendimiento...")
@@ -135,17 +134,21 @@ def procesar_webcam(
             tiempos.append(dt)
             frame_count += 1
 
+            brillo_medio = float(np.mean(frame))
+
+            # Telemetría cada 10 frames
+            if frame_count % 10 == 1:
+                print(f"Frame #{frame_count:03d}: Brillo={brillo_medio:.1f}/255 | Rostros detectados={len(detecciones)} | Latencia={dt:.1f}ms")
+
             if modo_headless:
-                print(f" Frame {frame_count:02d}: {len(detecciones)} rostro(s) detectado(s) en {dt:.2f} ms")
                 if frame_count >= max_frames_headless:
                     break
             else:
                 # Alerta si el sensor entrega una imagen completamente negra
-                brillo_medio = np.mean(frame)
                 if brillo_medio < 10.0:
                     cv2.putText(
                         frame,
-                        "CUIDADO: Sensor oscuro. Revisa la tapa de la webcam.",
+                        f"CUIDADO: Sensor oscuro (Brillo={brillo_medio:.1f}). Revisa tapa/antivirus.",
                         (15, frame.shape[0] - 20),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.55,
@@ -187,7 +190,7 @@ def procesar_webcam(
                 )
                 cv2.putText(
                     frame,
-                    f"Rostros: {len(detecciones)} (Presiona 'q' para salir)",
+                    f"Rostros: {len(detecciones)} | Brillo: {brillo_medio:.0f} (Presiona 'q' para salir)",
                     (10, 50),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
