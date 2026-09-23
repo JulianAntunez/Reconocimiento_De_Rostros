@@ -70,11 +70,18 @@ def procesar_imagen_estatica(ruta_imagen: str, detector: FaceDetector, mostrar_v
 
 
 def abrir_camara(indice_camara: int = 0) -> Optional[cv2.VideoCapture]:
-    """Abre la cámara web con el backend nativo del sistema de forma segura."""
-    cap = cv2.VideoCapture(indice_camara)
+    """Abre la cámara web con DirectShow forzando FourCC MJPG para máxima compatibilidad en Windows."""
+    cap = cv2.VideoCapture(indice_camara, cv2.CAP_DSHOW)
     if not cap.isOpened():
-        cap = cv2.VideoCapture(indice_camara, cv2.CAP_DSHOW)
-    return cap if cap.isOpened() else None
+        cap = cv2.VideoCapture(indice_camara, cv2.CAP_ANY)
+        if not cap.isOpened():
+            return None
+
+    # En Windows 11, forzar MJPG descomprime el stream de hardware y evita buffers negros
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, DEFAULT_CONFIG.frame_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, DEFAULT_CONFIG.frame_height)
+    return cap
 
 
 def procesar_webcam(
