@@ -68,6 +68,41 @@ def procesar_imagen_estatica(ruta_imagen: str, detector: FaceDetector, mostrar_v
         cv2.destroyAllWindows()
 
 
+def abrir_camara_inteligente(indice_camara: int = 0) -> Optional[cv2.VideoCapture]:
+    """
+    Abre la cámara web probando automáticamente el mejor backend (MSMF / DirectShow)
+    asegurando que los frames contengan imagen real y no un buffer negro.
+    """
+    backends = [
+        (cv2.CAP_ANY, "Nativo (MSMF)"),
+        (cv2.CAP_MSMF, "Media Foundation"),
+        (cv2.CAP_DSHOW, "DirectShow"),
+    ]
+
+    for backend, nombre in backends:
+        cap = cv2.VideoCapture(indice_camara, backend)
+        if not cap.isOpened():
+            continue
+
+        # Esperar 4 frames de warm-up y chequear brillo
+        brillo_valido = False
+        for _ in range(4):
+            ret, frame = cap.read()
+            if ret and frame is not None and np.mean(frame) > 10.0:
+                brillo_valido = True
+                break
+
+        if brillo_valido:
+            print(f"[OK] Cámara #{indice_camara} conectada exitosamente vía {nombre}.")
+            return cap
+
+        cap.release()
+
+    # Si ninguno superó el umbral, retornar con CAP_ANY
+    cap = cv2.VideoCapture(indice_camara, cv2.CAP_ANY)
+    return cap if cap.isOpened() else None
+
+
 def procesar_webcam(
     detector: FaceDetector,
     indice_camara: int = 0,
@@ -75,24 +110,15 @@ def procesar_webcam(
     max_frames_headless: int = 15,
 ) -> None:
     """Prueba la detección en tiempo real desde la webcam."""
-    backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
-    cap = cv2.VideoCapture(indice_camara, backend)
+    cap = abrir_camara_inteligente(indice_camara)
 
-    if not cap.isOpened():
+    if cap is None or not cap.isOpened():
         print(f"\n[ERROR] No se pudo abrir la cámara en el índice {indice_camara}.")
         print("Causas posibles:")
-        print(" 1. La webcam está en uso por otra app (Teams, Zoom, Discord, etc.).")
+        print(" 1. Otra aplicación tiene la cámara abierta (Cámara de Windows, Zoom, Teams, Meet). Ciérrala.")
         print(" 2. Permisos de cámara bloqueados en la configuración de Windows.")
         print(" 3. Si usas cámara externa, prueba con '--cam 1'.")
         return
-
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, DEFAULT_CONFIG.frame_width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, DEFAULT_CONFIG.frame_height)
-
-    print(f"\n[OK] Cámara #{indice_camara} conectada.")
-    print("Ajustando exposición y balance de blancos...")
-    for _ in range(8):
-        cap.read()
 
     nombre_ventana = "Fase 2: Prueba de Deteccion (MediaPipe)"
     if not modo_headless:
