@@ -69,38 +69,11 @@ def procesar_imagen_estatica(ruta_imagen: str, detector: FaceDetector, mostrar_v
         cv2.destroyAllWindows()
 
 
-def abrir_camara_inteligente(indice_camara: int = 0) -> Optional[cv2.VideoCapture]:
-    """
-    Abre la cámara web probando automáticamente el mejor backend (MSMF / DirectShow)
-    asegurando que los frames contengan imagen real y no un buffer negro.
-    """
-    backends = [
-        (cv2.CAP_ANY, "Nativo (MSMF)"),
-        (cv2.CAP_MSMF, "Media Foundation"),
-        (cv2.CAP_DSHOW, "DirectShow"),
-    ]
-
-    for backend, nombre in backends:
-        cap = cv2.VideoCapture(indice_camara, backend)
-        if not cap.isOpened():
-            continue
-
-        # Esperar 4 frames de warm-up y chequear brillo
-        brillo_valido = False
-        for _ in range(4):
-            ret, frame = cap.read()
-            if ret and frame is not None and np.mean(frame) > 10.0:
-                brillo_valido = True
-                break
-
-        if brillo_valido:
-            print(f"[OK] Cámara #{indice_camara} conectada exitosamente vía {nombre}.")
-            return cap
-
-        cap.release()
-
-    # Si ninguno superó el umbral, retornar con CAP_ANY
-    cap = cv2.VideoCapture(indice_camara, cv2.CAP_ANY)
+def abrir_camara(indice_camara: int = 0) -> Optional[cv2.VideoCapture]:
+    """Abre la cámara web con el backend nativo del sistema de forma segura."""
+    cap = cv2.VideoCapture(indice_camara)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(indice_camara, cv2.CAP_DSHOW)
     return cap if cap.isOpened() else None
 
 
@@ -111,33 +84,60 @@ def procesar_webcam(
     max_frames_headless: int = 15,
 ) -> None:
     """Prueba la detección en tiempo real desde la webcam."""
-    cap = abrir_camara_inteligente(indice_camara)
+    cap = abrir_camara(indice_camara)
 
     if cap is None or not cap.isOpened():
         print(f"\n[ERROR] No se pudo abrir la cámara en el índice {indice_camara}.")
         print("Causas posibles:")
-        print(" 1. Otra aplicación tiene la cámara abierta (Cámara de Windows, Zoom, Teams, Meet). Ciérrala.")
+        print(" 1. Otra aplicación tiene la cámara abierta (app 'Cámara de Windows', Teams, Zoom, Meet).")
         print(" 2. Permisos de cámara bloqueados en la configuración de Windows.")
-        print(" 3. Si usas cámara externa, prueba con '--cam 1'.")
+        print(" 3. Si usas cámara externa USB, prueba con '--cam 1'.")
+        return
+
+    print(f"\n[OK] Cámara #{indice_camara} conectada.")
+    print("Sincronizando sensor y auto-exposición...")
+
+    # Esperar hasta 1.5s a que el sensor de la cámara despierte y entregue frames con luz
+    frame_valido = None
+    for _ in range(25):
+        ret, temp_frame = cap.read()
+        if ret and temp_frame is not None and temp_frame.size > 0:
+            frame_valido = temp_frame
+            if np.mean(temp_frame) > 10.0:
+                break
+        time.sleep(0.05)
+
+    if frame_valido is None:
+        print("\n[ERROR] La cámara se abrió pero no está enviando frames.")
+        print("IMPORTANTE: Cierra la app 'Cámara' de Windows o cualquier navegador que la esté usando.")
+        cap.release()
         return
 
     nombre_ventana = "Fase 2: Prueba de Deteccion (MediaPipe)"
     if not modo_headless:
         cv2.namedWindow(nombre_ventana, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(nombre_ventana, DEFAULT_CONFIG.frame_width, DEFAULT_CONFIG.frame_height)
+        h, w = frame_valido.shape[:2]
+        cv2.resizeWindow(nombre_ventana, w, h)
         print("Iniciando ventana en vivo. Presiona 'q' o 'ESC' para salir.")
     else:
         print(f"Modo no interactivo: capturando {max_frames_headless} frames para medir rendimiento...")
 
     frame_count = 0
+    fallos_consecutivos = 0
     tiempos = []
 
     try:
         while True:
             ret, frame = cap.read()
             if not ret or frame is None:
-                print("[ERROR] Error al leer frame de la cámara.")
-                break
+                fallos_consecutivos += 1
+                if fallos_consecutivos >= 15:
+                    print("[ERROR] Error al leer frame de la cámara.")
+                    break
+                time.sleep(0.02)
+                continue
+
+            fallos_consecutivos = 0
 
             t0 = time.perf_counter()
             detecciones = detector.detect(frame)
