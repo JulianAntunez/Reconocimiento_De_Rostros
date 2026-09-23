@@ -95,29 +95,10 @@ def procesar_webcam(
         return
 
     print(f"\n[OK] Cámara #{indice_camara} conectada.")
-    print("Sincronizando sensor y auto-exposición...")
-
-    # Esperar hasta 1.5s a que el sensor de la cámara despierte y entregue frames con luz
-    frame_valido = None
-    for _ in range(25):
-        ret, temp_frame = cap.read()
-        if ret and temp_frame is not None and temp_frame.size > 0:
-            frame_valido = temp_frame
-            if np.mean(temp_frame) > 10.0:
-                break
-        time.sleep(0.05)
-
-    if frame_valido is None:
-        print("\n[ERROR] La cámara se abrió pero no está enviando frames.")
-        print("IMPORTANTE: Cierra la app 'Cámara' de Windows o cualquier navegador que la esté usando.")
-        cap.release()
-        return
-
     nombre_ventana = "Fase 2: Prueba de Deteccion (MediaPipe)"
+
     if not modo_headless:
         cv2.namedWindow(nombre_ventana, cv2.WINDOW_NORMAL)
-        h, w = frame_valido.shape[:2]
-        cv2.resizeWindow(nombre_ventana, w, h)
         print("Iniciando ventana en vivo. Presiona 'q' o 'ESC' para salir.")
     else:
         print(f"Modo no interactivo: capturando {max_frames_headless} frames para medir rendimiento...")
@@ -131,10 +112,12 @@ def procesar_webcam(
             ret, frame = cap.read()
             if not ret or frame is None:
                 fallos_consecutivos += 1
-                if fallos_consecutivos >= 15:
-                    print("[ERROR] Error al leer frame de la cámara.")
+                if fallos_consecutivos == 1:
+                    print("Esperando señal de video de la cámara (asegúrate de cerrar otras apps de cámara)...")
+                if fallos_consecutivos >= 30:
+                    print("\n[ERROR] No se pudo leer video de la cámara. Verifica que ninguna otra app la esté utilizando.")
                     break
-                time.sleep(0.02)
+                time.sleep(0.1)
                 continue
 
             fallos_consecutivos = 0
