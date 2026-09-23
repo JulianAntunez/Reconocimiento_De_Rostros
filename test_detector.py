@@ -90,10 +90,17 @@ def procesar_webcam(
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, DEFAULT_CONFIG.frame_height)
 
     print(f"\n[OK] Cámara #{indice_camara} conectada.")
-    if modo_headless:
-        print(f"Modo no interactivo: capturando {max_frames_headless} frames para medir rendimiento...")
-    else:
+    print("Ajustando exposición y balance de blancos...")
+    for _ in range(8):
+        cap.read()
+
+    nombre_ventana = "Fase 2: Prueba de Deteccion (MediaPipe)"
+    if not modo_headless:
+        cv2.namedWindow(nombre_ventana, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(nombre_ventana, DEFAULT_CONFIG.frame_width, DEFAULT_CONFIG.frame_height)
         print("Iniciando ventana en vivo. Presiona 'q' o 'ESC' para salir.")
+    else:
+        print(f"Modo no interactivo: capturando {max_frames_headless} frames para medir rendimiento...")
 
     frame_count = 0
     tiempos = []
@@ -116,6 +123,19 @@ def procesar_webcam(
                 if frame_count >= max_frames_headless:
                     break
             else:
+                # Alerta si el sensor entrega una imagen completamente negra
+                brillo_medio = np.mean(frame)
+                if brillo_medio < 10.0:
+                    cv2.putText(
+                        frame,
+                        "CUIDADO: Sensor oscuro. Revisa la tapa de la webcam.",
+                        (15, frame.shape[0] - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55,
+                        (0, 0, 255),
+                        2,
+                    )
+
                 # Dibujar detecciones
                 for idx, det in enumerate(detecciones, start=1):
                     x, y, w, h = det.box
@@ -158,8 +178,8 @@ def procesar_webcam(
                     2,
                 )
 
-                cv2.imshow("Fase 2: Prueba de Deteccion (MediaPipe)", frame)
-                tecla = cv2.waitKey(1) & 0xFF
+                cv2.imshow(nombre_ventana, frame)
+                tecla = cv2.waitKey(10) & 0xFF
                 if tecla in (ord("q"), ord("Q"), 27):  # 'q' o ESC
                     break
 

@@ -94,7 +94,7 @@ class FaceDetector:
 
             # Extracción opcional de puntos clave de landmarks
             landmarks_dict: Dict[str, Tuple[int, int]] = {}
-            if raw_det.location_data.keypoints:
+            if hasattr(raw_det.location_data, "relative_keypoints") and raw_det.location_data.relative_keypoints:
                 nombres_puntos = [
                     "ojo_derecho",
                     "ojo_izquierdo",
@@ -103,7 +103,7 @@ class FaceDetector:
                     "trago_oreja_derecha",
                     "trago_oreja_izquierda",
                 ]
-                for i, kp in enumerate(raw_det.location_data.keypoints):
+                for i, kp in enumerate(raw_det.location_data.relative_keypoints):
                     if i < len(nombres_puntos):
                         kp_x = int(kp.x * w)
                         kp_y = int(kp.y * h)
