@@ -1,0 +1,28 @@
+# ========================================================
+# Dependencias principales del proyecto de Visión por Computadora
+# ========================================================
+
+# Procesamiento de imagen y visión por computadora
+opencv-python==4.10.0.84
+
+# Detección de rostros ultra-rápida en CPU
+mediapipe==0.10.14
+
+# Motor de inferencia para redes neuronales ligeras en CPU
+onnxruntime==1.19.2
+
+# Cálculo numérico y manipulación de matrices
+numpy>=1.24.0,<2.0.0
+
+# Manipulación y guardado de datos tabulares (CSV)
+pandas>=2.1.0,<3.0.0
+
+# Procesamiento de formatos de imagen
+Pillow>=10.0.0,<11.0.0
+
+# Interfaz Web interactiva y streaming de video WebRTC
+streamlit>=1.38.0
+streamlit-webrtc>=0.47.9
+
+# Pruebas unitarias
+pytest>=8.0.0
