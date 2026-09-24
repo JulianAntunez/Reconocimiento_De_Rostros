@@ -46,7 +46,7 @@ def test_opencv_app_renderizar_frame(app):
     )
 
     # Renderizar sin errores
-    app._renderizar_frame(fake_frame, [(det, em_res)], fps=30.0, latencia_total=20.0)
+    app._renderizar_frame(fake_frame, [(1, det, em_res)], fps=30.0, latencia_total=20.0)
     assert fake_frame.shape == (480, 640, 3)
 
 

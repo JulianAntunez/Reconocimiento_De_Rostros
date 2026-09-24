@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 
 from config import DEFAULT_CONFIG, AppConfig
-from core import FaceDetector, EmotionClassifier, EmotionResult, FaceDetection
+from core import FaceDetector, EmotionClassifier, EmotionResult, FaceDetection, FaceTracker
 from utils import EmotionCSVLogger
 
 # Paleta armónica de colores BGR según la emoción
@@ -43,9 +43,11 @@ class OpenCVApp:
         self.threshold = threshold if threshold is not None else self.config.emotion_confidence_threshold
         self.enable_logging = enable_logging
 
-        # Inicialización de modelos
+        # Inicialización de modelos y tracking
         self.detector = FaceDetector(min_confidence=self.config.face_detection_confidence)
         self.classifier = EmotionClassifier(min_confidence=self.threshold)
+        self.tracker = FaceTracker(window_size=7)
+        self.enable_smoothing: bool = True
 
         # Estado de la interfaz
         self.show_hud_bars: bool = True
@@ -190,22 +192,22 @@ class OpenCVApp:
     def _renderizar_frame(
         self,
         frame: np.ndarray,
-        detecciones_con_emocion: List[Tuple[FaceDetection, EmotionResult]],
+        detecciones_con_emocion: List[Tuple[int, FaceDetection, EmotionResult]],
         fps: float,
         latencia_total: float,
     ) -> None:
         """Dibuja todos los elementos gráficos sobre el frame."""
-        # 1. Recuadros y etiquetas de rostros
-        for idx, (det, em_res) in enumerate(detecciones_con_emocion, start=1):
+        # 1. Recuadros y etiquetas de rostros con ID de tracking
+        for (track_id, det, em_res) in detecciones_con_emocion:
             x, y, w, h = det.box
             color = EMOTION_COLORS.get(em_res.emotion, (0, 255, 0))
 
             # Dibujar esquinas del recuadro
             self._dibujar_esquinas_box(frame, det.box, color=color, thickness=2)
 
-            # Etiqueta de emoción con fondo
-            etiqueta = f"#{idx} {em_res.emotion.upper()}: {em_res.confidence * 100:.0f}%"
-            (tw, th), _ = cv2.getTextSize(etiqueta, cv2.FONT_HERSHEY_SIMPLEX, 0.60, 2)
+            # Etiqueta con ID persistente y porcentaje
+            etiqueta = f"ID:{track_id} {em_res.emotion.upper()} {em_res.confidence * 100:.0f}%"
+            (tw, th), _ = cv2.getTextSize(etiqueta, cv2.FONT_HERSHEY_SIMPLEX, 0.58, 2)
             y_text = max(26, y - 8)
 
             cv2.rectangle(
@@ -220,32 +222,33 @@ class OpenCVApp:
                 etiqueta,
                 (x + 4, y_text - 2),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.60,
+                0.58,
                 (0, 0, 0),
                 2,
             )
 
-        # 2. Panel HUD de probabilidades para el primer rostro (si está activo)
+        # 2. Panel HUD de probabilidades para el primer rostro activo
         if self.show_hud_bars and detecciones_con_emocion:
-            self._dibujar_panel_probabilidades(frame, detecciones_con_emocion[0][1], x_pos=15, y_pos=85)
+            self._dibujar_panel_probabilidades(frame, detecciones_con_emocion[0][2], x_pos=15, y_pos=85)
 
-        # 3. Telemetría superior
+        # 3. Telemetría superior y estado de suavizado
         if self.show_stats:
+            estado_smooth = "ON" if self.enable_smoothing else "OFF"
             cv2.putText(
                 frame,
-                f"FPS: {fps:.1f} | Latencia: {latencia_total:.1f}ms | Umbral: {self.classifier.min_confidence:.2f}",
+                f"FPS: {fps:.1f} | Latencia: {latencia_total:.1f}ms | Umbral: {self.classifier.min_confidence:.2f} | Smooth: {estado_smooth}",
                 (15, 25),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.55,
+                0.52,
                 (0, 255, 255),
                 2,
             )
             cv2.putText(
                 frame,
-                f"Rostros: {len(detecciones_con_emocion)} | [H] HUD  [C] Captura  [T] Umbral  [Q] Salir",
+                f"Rostros: {len(detecciones_con_emocion)} | [H] HUD  [C] Foto  [T] Umbral  [M] Suavizado  [Q] Salir",
                 (15, 48),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.45,
+                0.44,
                 (240, 240, 240),
                 1,
             )
@@ -324,19 +327,32 @@ class OpenCVApp:
                 # 1. Detección
                 detecciones = self.detector.detect(frame)
 
-                # 2. Clasificación
-                resultados: List[Tuple[FaceDetection, EmotionResult]] = []
-                for f_idx, det in enumerate(detecciones):
+                # 2. Clasificación cruda
+                raw_results: List[EmotionResult] = []
+                dets_validas: List[FaceDetection] = []
+                for det in detecciones:
                     crop = FaceDetector.crop_face(frame, det.box, margin=0.15)
                     if crop is not None:
                         em_res = self.classifier.predict(crop)
                         if em_res:
-                            resultados.append((det, em_res))
-                            self.session_counts[em_res.emotion] = (
-                                self.session_counts.get(em_res.emotion, 0) + 1
-                            )
-                            if logger:
-                                logger.log_prediction(frame_id=frame_count, face_id=f_idx, result=em_res)
+                            raw_results.append(em_res)
+                            dets_validas.append(det)
+
+                # 3. Seguimiento multirrostro y suavizado temporal
+                if self.enable_smoothing:
+                    items_finales = self.tracker.update(dets_validas, raw_results)
+                else:
+                    items_finales = [
+                        (idx, det, raw_res)
+                        for idx, (det, raw_res) in enumerate(zip(dets_validas, raw_results), start=1)
+                    ]
+
+                for track_id, det, final_res in items_finales:
+                    self.session_counts[final_res.emotion] = (
+                        self.session_counts.get(final_res.emotion, 0) + 1
+                    )
+                    if logger:
+                        logger.log_prediction(frame_id=frame_count, face_id=track_id, result=final_res)
 
                 dt = (time.perf_counter() - t0) * 1000
                 tiempos_frame.append(dt)
@@ -344,8 +360,8 @@ class OpenCVApp:
                 lat_media = np.mean(tiempos_frame[-30:]) if tiempos_frame else dt
                 fps = 1000.0 / lat_media if lat_media > 0 else 0
 
-                # 3. Renderizado
-                self._renderizar_frame(frame, resultados, fps=fps, latencia_total=lat_media)
+                # 4. Renderizado
+                self._renderizar_frame(frame, items_finales, fps=fps, latencia_total=lat_media)
 
                 cv2.imshow(nombre_ventana, frame)
                 tecla = cv2.waitKey(1) & 0xFF
@@ -360,6 +376,10 @@ class OpenCVApp:
                     self.show_stats = not self.show_stats
                     estado = "Visible" if self.show_stats else "Oculto"
                     self._set_notification(f"Telemetría: {estado}")
+                elif tecla in (ord("m"), ord("M")):
+                    self.enable_smoothing = not self.enable_smoothing
+                    estado = "Activado" if self.enable_smoothing else "Desactivado"
+                    self._set_notification(f"Suavizado Temporal: {estado}")
                 elif tecla in (ord("t"), ord("T")):
                     self._current_thresh_idx = (self._current_thresh_idx + 1) % len(self._threshold_levels)
                     nuevo_umbral = self._threshold_levels[self._current_thresh_idx]
