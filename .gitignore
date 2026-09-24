@@ -17,6 +17,8 @@ __pycache__/
 # Datos y logs
 data/logs/*.csv
 !data/logs/.gitkeep
+data/capturas/*
+!data/capturas/.gitkeep
 
 # Modelos pesados binarios (se descargan automáticamente mediante utils/download_model.py)
 models/*.onnx
