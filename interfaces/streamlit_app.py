@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 import sys
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 import pandas as pd
