@@ -3,13 +3,13 @@
 # ========================================================
 
 # Procesamiento de imagen y visión por computadora
-opencv-python==4.10.0.84
+opencv-python>=4.8.0
 
 # Detección de rostros ultra-rápida en CPU
-mediapipe==0.10.14
+mediapipe>=0.10.14
 
 # Motor de inferencia para redes neuronales ligeras en CPU
-onnxruntime==1.19.2
+onnxruntime>=1.16.0
 
 # Cálculo numérico y manipulación de matrices
 numpy>=1.24.0,<2.0.0
