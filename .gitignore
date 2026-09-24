@@ -18,5 +18,10 @@ __pycache__/
 data/logs/*.csv
 !data/logs/.gitkeep
 
-# Modelos pesados temporales
+# Modelos pesados binarios (se descargan automáticamente mediante utils/download_model.py)
+models/*.onnx
+!models/.gitkeep
 *.tmp
+
+# Archivos de prueba temporales
+captura_prueba.jpg
