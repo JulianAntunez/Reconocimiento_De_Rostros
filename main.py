@@ -45,8 +45,21 @@ def main() -> None:
         action="store_true",
         help="Ejecuta el script de diagnóstico de entorno y hardware antes de iniciar.",
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Lanza el dashboard web interactivo con Streamlit en el navegador.",
+    )
 
     args = parser.parse_args()
+
+    if args.web:
+        import subprocess
+        streamlit_app = str(Path(__file__).resolve().parent / "interfaces" / "streamlit_app.py")
+        print("\nIniciando Dashboard Web de Streamlit...")
+        print("Se abrirá automáticamente en tu navegador predeterminado (http://localhost:8501)")
+        subprocess.run([sys.executable, "-m", "streamlit", "run", streamlit_app])
+        return
 
     if args.check:
         from check_environment import main as run_check
