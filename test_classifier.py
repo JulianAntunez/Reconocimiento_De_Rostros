@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import DEFAULT_CONFIG
 from core import FaceDetector, EmotionClassifier, EmotionResult
+from utils import EmotionCSVLogger
 
 # Paleta de colores BGR para las diferentes emociones
 EMOTION_COLORS: Dict[str, Tuple[int, int, int]] = {
@@ -136,6 +137,7 @@ def procesar_imagen_estatica(
     ruta_imagen: str,
     detector: FaceDetector,
     classifier: EmotionClassifier,
+    logger: Optional[EmotionCSVLogger] = None,
     mostrar_ventana: bool = True,
 ) -> None:
     """Ejecuta detección y clasificación en una imagen estática."""
@@ -167,6 +169,9 @@ def procesar_imagen_estatica(
         em_res = classifier.predict(crop) if crop is not None else None
 
         if em_res:
+            if logger:
+                logger.log_prediction(frame_id=1, face_id=idx - 1, result=em_res)
+
             color = EMOTION_COLORS.get(em_res.emotion, (0, 255, 0))
             texto = f"#{idx}: {em_res.emotion.upper()} ({em_res.confidence * 100:.1f}%)"
             print(f" Rostro #{idx}: {texto} (Inferencia Emoción: {em_res.inference_time_ms:.1f}ms)")
@@ -189,11 +194,12 @@ def procesar_imagen_estatica(
 def procesar_webcam(
     detector: FaceDetector,
     classifier: EmotionClassifier,
+    logger: Optional[EmotionCSVLogger] = None,
     indice_camara: int = 0,
     modo_headless: bool = False,
     max_frames_headless: int = 20,
 ) -> None:
-    """Ejecuta detección y clasificación en tiempo real desde la webcam."""
+    """Ejecuta detección y clasificación en tiempo real desde la webcam con telemetría CSV."""
     cap = abrir_camara(indice_camara)
     if cap is None or not cap.isOpened():
         print(f"[ERROR] No se pudo abrir la cámara #{indice_camara}.")
@@ -232,13 +238,16 @@ def procesar_webcam(
 
             # 2. Clasificación de emociones para cada rostro
             resultados_emociones = []
-            for det in detecciones:
+            for face_idx, det in enumerate(detecciones):
                 crop = FaceDetector.crop_face(frame, det.box, margin=0.15)
                 if crop is not None:
                     res = classifier.predict(crop)
                     if res:
                         resultados_emociones.append((det, res))
                         tiempos_emocion.append(res.inference_time_ms)
+                        # Registrar en CSV
+                        if logger:
+                            logger.log_prediction(frame_id=frame_count, face_id=face_idx, result=res)
 
             dt_total = (time.perf_counter() - t_inicio_frame) * 1000
             tiempos_totales.append(dt_total)
@@ -332,24 +341,29 @@ def procesar_webcam(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Prueba individual de clasificación de emociones (Fase 3)")
+    parser = argparse.ArgumentParser(description="Prueba individual de clasificación de emociones (Fase 3 y 4)")
     parser.add_argument("--image", type=str, default=None, help="Ruta a una imagen JPG o PNG para probar")
     parser.add_argument("--cam", type=int, default=DEFAULT_CONFIG.camera_index, help="Índice de la cámara")
     parser.add_argument("--threshold", type=float, default=DEFAULT_CONFIG.emotion_confidence_threshold, help="Umbral de confianza")
     parser.add_argument("--headless", action="store_true", help="Modo sin interfaz gráfica")
+    parser.add_argument("--no-log", action="store_true", help="Desactiva el guardado de telemetría a CSV")
     args = parser.parse_args()
 
     detector = FaceDetector(min_confidence=DEFAULT_CONFIG.face_detection_confidence)
     classifier = EmotionClassifier(min_confidence=args.threshold)
+    logger = None if args.no_log else EmotionCSVLogger(source="imagen" if args.image else "webcam")
 
     try:
         if args.image:
-            procesar_imagen_estatica(args.image, detector, classifier, mostrar_ventana=not args.headless)
+            procesar_imagen_estatica(args.image, detector, classifier, logger=logger, mostrar_ventana=not args.headless)
         else:
-            procesar_webcam(detector, classifier, indice_camara=args.cam, modo_headless=args.headless)
+            procesar_webcam(detector, classifier, logger=logger, indice_camara=args.cam, modo_headless=args.headless)
     finally:
         detector.close()
         classifier.close()
+        if logger:
+            logger.close()
+            print(f"[OK] Telemetría registrada en: {logger.file_path} ({logger.total_logged} registros guardados)")
 
 
 if __name__ == "__main__":

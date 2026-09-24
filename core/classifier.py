@@ -12,7 +12,6 @@ import numpy as np
 import onnxruntime as ort
 
 from config import DEFAULT_CONFIG
-from utils.download_model import descargar_modelo
 
 
 @dataclass
@@ -53,6 +52,7 @@ class EmotionClassifier:
         # Asegurar que el modelo exista localmente
         if not self.model_path.is_file():
             print(f"[INFO] Modelo no encontrado en {self.model_path}. Iniciando descarga automática...")
+            from utils.download_model import descargar_modelo
             if not descargar_modelo(self.model_path):
                 raise FileNotFoundError(
                     f"No se pudo cargar ni descargar el modelo ONNX en: {self.model_path}"
